@@ -251,7 +251,7 @@ replay with conflict policies.
 - Authorization per site/organisation and role (planner, supervisor, technician, storekeeper); technicians only sync
   their assigned work.
 - Multi-tenant deployments add tenant isolation at the database (row-level security) — implemented in
-  [enterprise-saas-plateform](https://github.com/shivkumarsinghsky/enterprise-saas-plateform).
+  [enterprise-saas-platform](https://github.com/shivkumarsinghsky/enterprise-saas-platform).
 - Input validation via the OpenAPI schemas; database constraints as a last line of defence.
 - Audit trail through work order status history and immutable closed records.
 
@@ -274,10 +274,10 @@ Not implemented yet:
 ## Related Projects
 
 - [Real-Time Monitoring Platform](https://github.com/shivkumarsinghsky/realtime-monitoring-platform) — telemetry ingestion and alerting that feeds condition-based maintenance
-- [Enterprise SaaS Platform](https://github.com/shivkumarsinghsky/enterprise-saas-plateform) — multi-tenant platform with an asset module and RLS isolation
+- [Enterprise SaaS Platform](https://github.com/shivkumarsinghsky/enterprise-saas-platform) — multi-tenant platform with an asset module and RLS isolation
 - [Event-Driven Platform](https://github.com/shivkumarsinghsky/event-driven-platform) — outbox, idempotent consumers and DLQs used for EAM integration
 - [Microservices Patterns](https://github.com/shivkumarsinghsky/microservices-patterns) — event-sourced work order example and CQRS worklist
-- [Enterprise AI Agent Platform](https://github.com/shivkumarsinghsky/enterprise-ai-agent-plateform) — AI agents over maintenance data
+- [Enterprise AI Agent Platform](https://github.com/shivkumarsinghsky/enterprise-ai-agent-platform) — AI agents over maintenance data
 - [System Design Architecture](https://github.com/shivkumarsinghsky/system-design-architecture) — real-time monitoring and multi-tenant SaaS designs
 
 ## Author

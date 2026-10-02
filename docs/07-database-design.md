@@ -97,6 +97,6 @@ availability and MTBF.
 - Partial index on open work orders (`WHERE status NOT IN ('CLOSED','CANCELLED')`) keeps backlog queries fast as
   history grows.
 - Multi-site/multi-tenant deployments add `org_id`/`tenant_id` and row-level security — see
-  [enterprise-saas-plateform](https://github.com/shivkumarsinghsky/enterprise-saas-plateform).
+  [enterprise-saas-platform](https://github.com/shivkumarsinghsky/enterprise-saas-platform).
 
 Next: [Event Architecture](08-event-architecture.md)
