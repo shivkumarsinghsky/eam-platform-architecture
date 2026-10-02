@@ -1,0 +1,342 @@
+openapi: 3.1.0
+info:
+  title: EAM Platform API (reference)
+  version: 1.0.0
+  summary: Reference API contract for the Asset Registry, Work Management and Maintenance Planning services.
+  description: |
+    Reference API design by Shiv Kumar (https://github.com/shivkumarsinghsky). Resource-oriented, tenant and site
+    scoped by the caller's token, cursor-paginated, with optimistic concurrency (ETag / If-Match) on mutable
+    resources and Idempotency-Key on creates. Status changes are explicit commands rather than PATCHes of the
+    status field, so lifecycle rules live in one place.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: https://eam.example.com/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Assets
+  - name: Work Orders
+  - name: Preventive Maintenance
+  - name: Meters
+paths:
+  /assets:
+    get:
+      tags: [Assets]
+      summary: Search assets
+      operationId: listAssets
+      parameters:
+        - { name: site, in: query, schema: { type: string } }
+        - name: under
+          in: query
+          description: Hierarchy path prefix, e.g. SITE01.BOILER — returns the node and all descendants.
+          schema: { type: string }
+        - { name: class, in: query, schema: { type: string } }
+        - { name: criticality, in: query, schema: { type: string, enum: [A, B, C] } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Page of assets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Asset' } }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [Assets]
+      summary: Register an asset
+      operationId: createAsset
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssetCreate' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+  /assets/{assetId}:
+    parameters:
+      - $ref: '#/components/parameters/AssetId'
+    get:
+      tags: [Assets]
+      summary: Get an asset
+      operationId: getAsset
+      responses:
+        '200':
+          description: The asset
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /assets/{assetId}/move:
+    post:
+      tags: [Assets]
+      summary: Move an asset to another location or parent (records hierarchy history)
+      operationId: moveAsset
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locationId: { type: string }
+                parentAssetId: { type: [string, 'null'] }
+                reason: { type: string }
+      responses:
+        '200': { description: Moved, content: { application/json: { schema: { $ref: '#/components/schemas/Asset' } } } }
+        '412': { $ref: '#/components/responses/Problem' }
+  /work-orders:
+    get:
+      tags: [Work Orders]
+      summary: Search work orders
+      operationId: listWorkOrders
+      parameters:
+        - { name: status, in: query, schema: { type: array, items: { $ref: '#/components/schemas/WorkOrderStatus' } }, style: form, explode: false }
+        - { name: assetId, in: query, schema: { type: string } }
+        - { name: assignedTo, in: query, schema: { type: string } }
+        - { name: workType, in: query, schema: { $ref: '#/components/schemas/WorkType' } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Page of work orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/WorkOrder' } }
+                  nextCursor: { type: [string, 'null'] }
+    post:
+      tags: [Work Orders]
+      summary: Raise a work request / work order
+      operationId: createWorkOrder
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkOrderCreate' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkOrder' } } } }
+        '422': { $ref: '#/components/responses/Problem' }
+  /work-orders/{workOrderId}:
+    parameters:
+      - $ref: '#/components/parameters/WorkOrderId'
+    get:
+      tags: [Work Orders]
+      summary: Get a work order with actuals
+      operationId: getWorkOrder
+      responses:
+        '200': { description: The work order, content: { application/json: { schema: { $ref: '#/components/schemas/WorkOrder' } } } }
+        '404': { $ref: '#/components/responses/Problem' }
+  /work-orders/{workOrderId}/transitions:
+    post:
+      tags: [Work Orders]
+      summary: Change status (approve, schedule, start, hold, complete, close, cancel)
+      description: Rejected with 409 when the lifecycle does not allow the transition or a guard fails.
+      operationId: transitionWorkOrder
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { $ref: '#/components/schemas/WorkOrderStatus' }
+                note: { type: string }
+      responses:
+        '200': { description: Transitioned, content: { application/json: { schema: { $ref: '#/components/schemas/WorkOrder' } } } }
+        '409': { $ref: '#/components/responses/Problem' }
+        '412': { $ref: '#/components/responses/Problem' }
+  /work-orders/{workOrderId}/labor:
+    post:
+      tags: [Work Orders]
+      summary: Record labor actuals
+      operationId: recordLabor
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [laborId, hours, workDate]
+              properties:
+                laborId: { type: string }
+                craft: { type: string }
+                hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
+                workDate: { type: string, format: date }
+      responses:
+        '201': { description: Recorded }
+        '409': { $ref: '#/components/responses/Problem' }
+  /work-orders/{workOrderId}/failure-report:
+    put:
+      tags: [Work Orders]
+      summary: Set problem / cause / remedy codes
+      operationId: putFailureReport
+      parameters:
+        - $ref: '#/components/parameters/WorkOrderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FailureReport' }
+      responses:
+        '200': { description: Saved }
+        '422': { $ref: '#/components/responses/Problem' }
+  /pm-schedules/{pmId}/forecast:
+    get:
+      tags: [Preventive Maintenance]
+      summary: Forecast upcoming due dates for a PM
+      operationId: forecastPm
+      parameters:
+        - { name: pmId, in: path, required: true, schema: { type: string } }
+        - { name: count, in: query, schema: { type: integer, minimum: 1, maximum: 52, default: 12 } }
+      responses:
+        '200':
+          description: Due dates
+          content:
+            application/json:
+              schema: { type: array, items: { type: string, format: date } }
+  /meters/{meterId}/readings:
+    post:
+      tags: [Meters]
+      summary: Record meter readings (manual or summarised IoT)
+      operationId: postReadings
+      parameters:
+        - { name: meterId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 1000
+              items:
+                type: object
+                required: [at, value]
+                properties:
+                  at: { type: string, format: date-time }
+                  value: { type: number }
+                  source: { type: string, enum: [MANUAL, IOT] }
+      responses:
+        '202': { description: Accepted; meter-based PM evaluation happens asynchronously }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    AssetId: { name: assetId, in: path, required: true, schema: { type: string } }
+    WorkOrderId: { name: workOrderId, in: path, required: true, schema: { type: string } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 128 } }
+    IfMatch: { name: If-Match, in: header, required: true, schema: { type: string }, description: ETag from the last read (optimistic concurrency) }
+  responses:
+    Problem:
+      description: Error (RFC 9457 problem details)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        correlationId: { type: string }
+    Criticality: { type: string, enum: [A, B, C] }
+    WorkType: { type: string, enum: [CM, PM, PdM, INSP, EM] }
+    WorkOrderStatus:
+      type: string
+      enum: [REQUESTED, APPROVED, PLANNED, WAITING_MATERIAL, SCHEDULED, IN_PROGRESS, ON_HOLD, COMPLETED, CLOSED, CANCELLED]
+    AssetCreate:
+      type: object
+      required: [assetNum, description, classCode, siteCode]
+      properties:
+        assetNum: { type: string, pattern: '^[A-Z0-9-]{2,32}$' }
+        description: { type: string, maxLength: 200 }
+        classCode: { type: string }
+        siteCode: { type: string }
+        locationId: { type: string }
+        parentAssetId: { type: string }
+        criticality: { $ref: '#/components/schemas/Criticality' }
+        manufacturer: { type: string }
+        model: { type: string }
+        serialNumber: { type: string }
+        installDate: { type: string, format: date }
+    Asset:
+      allOf:
+        - $ref: '#/components/schemas/AssetCreate'
+        - type: object
+          required: [id, path, lifecycleStatus]
+          properties:
+            id: { type: string }
+            path: { type: string, examples: [SITE01.BOILER.FW.P101] }
+            lifecycleStatus: { type: string, enum: [PLANNED, COMMISSIONING, OPERATING, NOT_READY, DECOMMISSIONED, DISPOSED] }
+    FailureReport:
+      type: object
+      required: [problemCode, causeCode, remedyCode]
+      properties:
+        problemCode: { type: string }
+        causeCode: { type: string }
+        remedyCode: { type: string }
+    WorkOrderCreate:
+      type: object
+      required: [workType, description, priority]
+      properties:
+        assetId: { type: string }
+        locationId: { type: string }
+        workType: { $ref: '#/components/schemas/WorkType' }
+        description: { type: string, maxLength: 500 }
+        priority: { type: integer, minimum: 1, maximum: 5 }
+        jobPlanCode: { type: string }
+        targetStart: { type: string, format: date }
+    WorkOrder:
+      allOf:
+        - $ref: '#/components/schemas/WorkOrderCreate'
+        - type: object
+          required: [id, woNum, status]
+          properties:
+            id: { type: string }
+            woNum: { type: string }
+            status: { $ref: '#/components/schemas/WorkOrderStatus' }
+            assignedTo: { type: [string, 'null'] }
+            pmId: { type: [string, 'null'] }
+            failureReport: { oneOf: [{ $ref: '#/components/schemas/FailureReport' }, { type: 'null' }] }
+            actuals:
+              type: object
+              properties:
+                laborHours: { type: number }
+                laborCost: { type: number }
+                materialCost: { type: number }

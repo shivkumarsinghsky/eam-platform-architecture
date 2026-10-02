@@ -1,0 +1,36 @@
+# PostgreSQL loaded with the EAM reference model, plus a test runner.
+#   docker compose up -d postgres          # schema, sample plant data, KPI views, star schema + load
+#   docker compose run --rm tests          # runs the full test suite against it
+#   psql postgresql://eam:eam-local-dev@localhost:5432/eam -c "SELECT * FROM asset_reliability('2026-01-01', '2026-10-01')"
+# Credentials are local development values only.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eam
+      POSTGRES_PASSWORD: eam-local-dev
+      POSTGRES_DB: eam
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes:
+      # Executed in name order on first start; ltree ships with the official image.
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./sql/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+      - ./sql/03_operational_views.sql:/docker-entrypoint-initdb.d/03_operational_views.sql:ro
+      - ./sql/04_reporting_star_schema.sql:/docker-entrypoint-initdb.d/04_reporting_star_schema.sql:ro
+      - ./sql/05_load_dw.sql:/docker-entrypoint-initdb.d/05_load_dw.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eam -d eam"]
+      interval: 5s
+      retries: 10
+
+  tests:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    profiles: ["tests"]
+    environment:
+      # The SQL tests recreate the public and dw schemas in this database.
+      EAM_DATABASE_URL: postgresql://eam:eam-local-dev@postgres:5432/eam
+    depends_on:
+      postgres:
+        condition: service_healthy
